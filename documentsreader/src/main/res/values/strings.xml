@@ -1,0 +1,10 @@
+<resources>
+    <string name="cannot_open_file_Path">Невозможно открыть файл: %1$s</string>
+    <string name="cannot_open_buffer">Невозможно открыть буфер</string>
+    <string name="fill_out_text_field">Заполните текстовое поле</string>
+    <string name="enter_password">Введите пароль</string>
+    <string name="cancel">Отмена</string>
+    <string name="okay">ОК</string>
+    <string name="choose_value">Выберите значение</string>
+
+</resources>

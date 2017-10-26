@@ -1,0 +1,1 @@
+Images and pdf documents viewer based on MuPdf and RecyclerView
