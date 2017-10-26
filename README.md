@@ -1,1 +1,2 @@
-Images and pdf documents viewer based on MuPdf and RecyclerView
+# DocumentsViewer
+Viewer that can open pdf, jpeg and other formats, In progress...
