@@ -3,10 +3,8 @@ package ru.dimaarts.documentsreader.layouts;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.os.Bundle;
-import android.os.Parcel;
 import android.os.Parcelable;
 import android.support.v7.widget.RecyclerView;
-import android.util.Log;
 import android.view.View;
 
 import java.util.ArrayList;
@@ -25,10 +23,14 @@ public class DocumentsReaderLayoutManager extends RecyclerView.LayoutManager imp
     private float offsetLeft;
     private float offsetTop;
     private PageItemsAdapter mAdapter;
-    private float oldFullHeight = -1;
-    private float oldMaxWidth = -1;
     private boolean needUpdateHqsAfterOnLayout;
     private PagerView pager;
+
+    private int focusViewPositionAfterSizeChanged;
+    private double percentTopPositionInViewAfterSizeChanged;
+    private double percentLeftPositionInViewAfterSizeChanged;
+
+
 
     @Override
     public void onLayoutChildren(RecyclerView.Recycler recycler, RecyclerView.State state) {
@@ -45,23 +47,23 @@ public class DocumentsReaderLayoutManager extends RecyclerView.LayoutManager imp
         for(int i=0; i<getChildCount(); i++) {
             detachedViews.add(getChildAt(i));
         }
-        int allViewsCount = getChildCount();
+        //int allViewsCount = getChildCount();
         detachAndScrapAttachedViews(recycler);
         fillDown(recycler, detachedViews);
-        int detachedCount = 0;
+        /*int detachedCount = 0;
         for (View viewFoRecycle:
                 detachedViews) {
             detachedCount++;
             //recycler.recycleView(viewFoRecycle);
         }
-        Log.d("fill", "Views count = " + detachedCount + " from " + allViewsCount);
+        Log.d("fill", "Views count = " + detachedCount + " from " + allViewsCount);*/
     }
 
     private void fillDown(RecyclerView.Recycler recycler, List<View> viewsFoRecycle) {
         Offset offset = new Offset();
         int pos = getItemPositionByCoordinatesUp(offsetTop, offset);
         pager.setPage(pos);
-        int viewTop =  offset.getOffset();
+        double viewTop =  offset.getOffset();
         float anchorLeft = -offsetLeft;
 
         boolean fillDown = true;
@@ -85,7 +87,7 @@ public class DocumentsReaderLayoutManager extends RecyclerView.LayoutManager imp
             int scaledChildWidth = (int) (originalWidth * mScale);
             int scaledChildHeight = (int) (originalHeight * mScale);
             measureChildWithMargins(view, scaledChildWidth, scaledChildHeight);
-            layoutDecorated(view, (int) anchorLeft, viewTop, (int) (anchorLeft + scaledChildWidth), viewTop + scaledChildHeight);
+            layoutDecorated(view, (int) anchorLeft, (int) viewTop, (int) (anchorLeft + scaledChildWidth), (int) (viewTop + scaledChildHeight));
             viewTop = getDecoratedBottom(view);
             fillDown = viewTop <= height;
             pos++;
@@ -97,11 +99,11 @@ public class DocumentsReaderLayoutManager extends RecyclerView.LayoutManager imp
     }
 
     private class Offset {
-        private int offset;
-        public int getOffset() {
+        private double offset;
+        public double getOffset() {
             return offset;
         }
-        public void setOffset(int offset) {
+        public void setOffset(double offset) {
             this.offset = offset;
         }
     }
@@ -123,7 +125,7 @@ public class DocumentsReaderLayoutManager extends RecyclerView.LayoutManager imp
             }
         }
 
-        offset.setOffset((int) (fullHeight - y));
+        offset.setOffset(fullHeight - y);
         return firstItemInList + 1;
     }
 
@@ -153,7 +155,7 @@ public class DocumentsReaderLayoutManager extends RecyclerView.LayoutManager imp
         }
     }
 
-    boolean shouldMeasureChild(View child, int widthSpec, int heightSpec, RecyclerView.LayoutParams lp) {
+    private boolean shouldMeasureChild(View child, int widthSpec, int heightSpec, RecyclerView.LayoutParams lp) {
         return child.isLayoutRequested()
                 || !isMeasurementCacheEnabled()
                 || !isMeasurementUpToDate(child.getWidth(), widthSpec, lp.width)
@@ -231,25 +233,22 @@ public class DocumentsReaderLayoutManager extends RecyclerView.LayoutManager imp
 
     @Override
     public void onSizeChanged(int w, int h, int oldw, int oldh) {
-        if(oldFullHeight>-1) {
-            float fullHeight = 0;
-            for (int i = 0; i < getItemCount(); i++) {
-                fullHeight += mAdapter.getViewItemSize(i).getHeight() * mScale;
-            }
-            float maxViewWidth = 0;
-            for(int i=0; i<getItemCount(); i++) {
-                maxViewWidth = Math.max(mAdapter.getViewItemSize(i).getWidth()*mScale, maxViewWidth);
-            }
-            float changeH = fullHeight/oldFullHeight;
-            float changeW = maxViewWidth/oldMaxWidth;
-            offsetTop *= changeH;
-            offsetTop = availableScrollTop(offsetTop);
-            offsetLeft *= changeW;
-            offsetLeft = availableScrollLeft(offsetLeft);
-            oldFullHeight = -1;
-            needUpdateHqsAfterOnLayout = true;
-            requestLayout();
+        float fullWidth = 0;
+        for(int i=0; i<getItemCount(); i++) {
+            fullWidth = Math.max(mAdapter.getViewItemSize(i).getWidth()*mScale, fullWidth);
         }
+
+        double offsetTopView = 0;
+        for (int i = 0; i < focusViewPositionAfterSizeChanged; i++) {
+            offsetTopView += mAdapter.getViewItemSize(i).getHeight() * mScale;
+        }
+        float viewHeight = mAdapter.getViewItemSize(focusViewPositionAfterSizeChanged).getHeight()*mScale;
+
+        offsetTop = availableScrollTop((float) (offsetTopView + viewHeight * percentTopPositionInViewAfterSizeChanged));
+        offsetLeft = availableScrollTop((float) (fullWidth * percentLeftPositionInViewAfterSizeChanged));
+
+        needUpdateHqsAfterOnLayout = true;
+        requestLayout();
     }
 
     @Override
@@ -394,25 +393,24 @@ public class DocumentsReaderLayoutManager extends RecyclerView.LayoutManager imp
     // TODO: Need uncomment this code and
     @Override
     public Parcelable onSaveInstanceState() {
-        // Create a bundle to put super parcelable in
+
+        // Compute padding above screen of first view in screen (it's need for true focusing after change orientation)
+        Offset offset = new Offset();
+        int focusViewPosition = getItemPositionByCoordinatesUp(offsetTop, offset);
+        double viewTop =  offset.getOffset();
+        int itemHeight = (int) (mAdapter.getViewItemSize(focusViewPosition).getHeight() * mScale);
+        int itemWidth = (int) (mAdapter.getViewItemSize(focusViewPosition).getWidth() * mScale);
+        double percentTopPositionInView = -viewTop/itemHeight;
+        double percentLeftPositionInView = offsetLeft/itemWidth;
+        // Save state
         Bundle bundle = new Bundle();
         bundle.putParcelable(SUPER_INSTANCE_STATE, super.onSaveInstanceState());
-        // Use abstract method to put mOriginalValue in the bundle;
-        bundle.putFloat("vOffset", offsetTop);
-        bundle.putFloat("hOffset", offsetLeft);
+
+        bundle.putInt("focusViewPosition", focusViewPosition);
+        bundle.putDouble("percentTopPositionInView", percentTopPositionInView);
+        bundle.putDouble("percentLeftPositionInView", percentLeftPositionInView);
+
         bundle.putFloat("scale", mScale);
-        float fullHeight = 0;
-        float maxViewWidth = 0;
-        if(mAdapter!=null) {
-            for (int i = 0; i < getItemCount(); i++) {
-                fullHeight += mAdapter.getViewItemSize(i).getHeight() * mScale;
-            }
-            for(int i=0; i<getItemCount(); i++) {
-                maxViewWidth = Math.max(mAdapter.getViewItemSize(i).getWidth()*mScale, maxViewWidth);
-            }
-        }
-        bundle.putFloat("fullHeight", fullHeight);
-        bundle.putFloat("maxWidth", maxViewWidth);
         return bundle;
     }
 
@@ -421,11 +419,11 @@ public class DocumentsReaderLayoutManager extends RecyclerView.LayoutManager imp
         // We know state is a Bundle:
         Bundle bundle = (Bundle) state;
         // Get mViewIds out of the bundle
-        offsetTop = bundle.getFloat("vOffset");
-        offsetLeft = bundle.getFloat("hOffset");
         mScale = bundle.getFloat("scale");
-        oldFullHeight = bundle.getFloat("fullHeight");
-        oldMaxWidth = bundle.getFloat("maxWidth");
+
+        focusViewPositionAfterSizeChanged = bundle.getInt("focusViewPosition");
+        percentTopPositionInViewAfterSizeChanged = bundle.getDouble("percentTopPositionInView");
+        percentLeftPositionInViewAfterSizeChanged = bundle.getDouble("percentLeftPositionInView");
 
         state = bundle.getParcelable(SUPER_INSTANCE_STATE);
         super.onRestoreInstanceState(state);
